@@ -7,7 +7,7 @@ const Dashboard = ({ setActiveSection }) => {
 
   const getToolDescription = (id) => {
     const descriptions = {
-      "tutorials": "Learn to use our AI tools effectively with step-by-step guidance",
+      "tutorials": "Learn to use AI tools effectively with step-by-step guidance",
       "email-assistant": "Generate professional emails with AI assistance",
       "note-summarizer": "Summarize lecture notes and extract key points",
       "quiz-generator": "Create quizzes and assignments automatically",

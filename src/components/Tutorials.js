@@ -89,7 +89,7 @@ const Tutorials = ({
           Interactive Tutorials
         </h2>
         <p className="text-gray-600">
-          Learn to use our AI tools effectively with step-by-step guidance
+          Learn to use AI tools effectively with step-by-step guidance
         </p>
       </div>
 
