@@ -11,6 +11,7 @@ import {
 
 export const navigationItems = [
   { id: "dashboard", label: "Dashboard", icon: BookOpen },
+  { id: "tutorials", label: "Tutorials", icon: Play },
   { id: "email-assistant", label: "Email Assistant", icon: Mail },
   { id: "note-summarizer", label: "Note Summarizer", icon: FileText },
   { id: "quiz-generator", label: "Quiz Generator", icon: Brain },
@@ -21,5 +22,5 @@ export const navigationItems = [
     icon: MessageSquare,
   },
   { id: "prompt-builder", label: "Prompt Builder", icon: Lightbulb },
-  { id: "tutorials", label: "Tutorials", icon: Play },
+  
 ];
