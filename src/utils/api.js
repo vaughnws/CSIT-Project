@@ -1,7 +1,11 @@
-// API Integration Function for OpenRouter
+import { useAuth } from '../contexts/AuthContext';
+
+// Enhanced API Integration Function for OpenRouter with user tracking
 export const callOpenRouter = async (
   prompt,
-  model = "openai/gpt-oss-20b:free@preset/rrc-eduai"
+  model = "openai/gpt-oss-20b:free@preset/rrc-eduai",
+  userId = null,
+  toolName = null
 ) => {
   try {
     const response = await fetch(
@@ -56,7 +60,34 @@ export const callOpenRouter = async (
       throw new Error("Invalid response format from API");
     }
 
-    return data.choices[0].message.content;
+    const responseContent = data.choices[0].message.content;
+
+    // Log usage if user and tool info provided
+    if (userId && toolName) {
+      try {
+        await fetch('/api/user/log-usage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: userId,
+            toolUsed: toolName,
+            sessionData: {
+              prompt_length: prompt.length,
+              response_length: responseContent.length,
+              model_used: model,
+              timestamp: new Date().toISOString()
+            }
+          }),
+        });
+      } catch (logError) {
+        console.warn('Failed to log usage:', logError);
+        // Don't throw error for logging failures
+      }
+    }
+
+    return responseContent;
   } catch (error) {
     console.error("Error calling OpenRouter API:", error);
 
@@ -81,8 +112,30 @@ export const callOpenRouter = async (
   }
 };
 
+// Hook for authenticated API calls
+export const useAuthenticatedAPI = () => {
+  const { user, logToolUsage } = useAuth();
+
+  const callOpenRouterWithAuth = async (prompt, toolName, model = "openai/gpt-oss-20b:free@preset/rrc-eduai") => {
+    const response = await callOpenRouter(prompt, model, user?.id, toolName);
+    
+    // Also log through auth context for immediate UI updates
+    if (user && toolName) {
+      await logToolUsage(toolName, {
+        prompt_length: prompt.length,
+        response_length: response.length,
+        model_used: model
+      });
+    }
+    
+    return response;
+  };
+
+  return { callOpenRouterWithAuth };
+};
+
 // Alternative API call function with different model options
-export const callOpenRouterWithModel = async (prompt, modelOption = "gpt3") => {
+export const callOpenRouterWithModel = async (prompt, modelOption = "gpt3", userId = null, toolName = null) => {
   const modelMap = {
     gpt3: "openai/gpt-3.5-turbo",
     gpt4: "openai/gpt-4-turbo",
@@ -92,7 +145,7 @@ export const callOpenRouterWithModel = async (prompt, modelOption = "gpt3") => {
   };
 
   const model = modelMap[modelOption] || modelMap["gpt3"];
-  return await callOpenRouter(prompt, model);
+  return await callOpenRouter(prompt, model, userId, toolName);
 };
 
 // Test API connection function
@@ -112,8 +165,8 @@ export const testAPIConnection = async () => {
   }
 };
 
-// Utility function to download text as file
-export const downloadTextFile = (content, filename) => {
+// Enhanced utility function to download text as file with user tracking
+export const downloadTextFile = async (content, filename, userId = null, toolName = null) => {
   try {
     const element = document.createElement("a");
     const file = new Blob([content], { type: "text/plain" });
@@ -122,6 +175,31 @@ export const downloadTextFile = (content, filename) => {
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+
+    // Log download action
+    if (userId && toolName) {
+      try {
+        await fetch('/api/user/log-usage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: userId,
+            toolUsed: `${toolName}_download`,
+            sessionData: {
+              action: 'download',
+              filename: filename,
+              content_length: content.length,
+              timestamp: new Date().toISOString()
+            }
+          }),
+        });
+      } catch (logError) {
+        console.warn('Failed to log download:', logError);
+      }
+    }
+
   } catch (error) {
     console.error("Error downloading file:", error);
     alert(
@@ -130,12 +208,14 @@ export const downloadTextFile = (content, filename) => {
   }
 };
 
-// Utility function to copy text to clipboard
-export const copyToClipboard = async (text) => {
+// Enhanced utility function to copy text to clipboard with user tracking
+export const copyToClipboard = async (text, userId = null, toolName = null) => {
   try {
+    let success = false;
+    
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
-      return true;
+      success = true;
     } else {
       // Fallback for older browsers
       const textArea = document.createElement("textarea");
@@ -146,14 +226,91 @@ export const copyToClipboard = async (text) => {
       document.body.appendChild(textArea);
       textArea.focus();
       textArea.select();
-      const result = document.execCommand("copy");
+      success = document.execCommand("copy");
       textArea.remove();
-      return result;
     }
+
+    // Log copy action
+    if (success && userId && toolName) {
+      try {
+        await fetch('/api/user/log-usage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: userId,
+            toolUsed: `${toolName}_copy`,
+            sessionData: {
+              action: 'copy',
+              content_length: text.length,
+              timestamp: new Date().toISOString()
+            }
+          }),
+        });
+      } catch (logError) {
+        console.warn('Failed to log copy action:', logError);
+      }
+    }
+
+    return success;
   } catch (error) {
     console.error("Failed to copy text: ", error);
     // Show fallback message to user
     prompt("Copy this text manually:\n\n" + text);
     return false;
   }
+};
+
+// User progress functions
+export const markTutorialComplete = async (userId, tutorialId) => {
+  try {
+    const response = await fetch('/api/user/progress', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId: userId,
+        tutorialId: tutorialId,
+      }),
+    });
+
+    if (response.ok) {
+      return await response.json();
+    } else {
+      throw new Error('Failed to mark tutorial complete');
+    }
+  } catch (error) {
+    console.error('Error marking tutorial complete:', error);
+    throw error;
+  }
+};
+
+// Get user statistics
+export const getUserStats = async (userId) => {
+  try {
+    const response = await fetch(`/api/user/stats?userId=${userId}`);
+    
+    if (response.ok) {
+      return await response.json();
+    } else {
+      throw new Error('Failed to fetch user stats');
+    }
+  } catch (error) {
+    console.error('Error fetching user stats:', error);
+    throw error;
+  }
+};
+
+// Export all functions
+export default {
+  callOpenRouter,
+  useAuthenticatedAPI,
+  callOpenRouterWithModel,
+  testAPIConnection,
+  downloadTextFile,
+  copyToClipboard,
+  markTutorialComplete,
+  getUserStats
 };
