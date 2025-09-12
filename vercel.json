@@ -1,5 +1,4 @@
 {
-    "name": "rrc-eduai-platform",
     "buildCommand": "npm run build",
     "outputDirectory": "build",
     "routes": [
@@ -12,14 +11,6 @@
         "dest": "/index.html"
       }
     ],
-    "env": {
-      "DATABASE_URL": "@database_url",
-      "POSTGRES_URL": "@postgres_url",
-      "NEXT_PUBLIC_STACK_PROJECT_ID": "@stack_project_id",
-      "NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY": "@stack_publishable_key",
-      "STACK_SECRET_SERVER_KEY": "@stack_secret_key",
-      "OPENROUTER_API_KEY": "@openrouter_api_key"
-    },
     "functions": {
       "api/**/*.js": {
         "runtime": "nodejs18.x"
