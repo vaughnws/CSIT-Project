@@ -197,7 +197,7 @@ const LoginPage = () => {
           <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <GraduationCap className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">RRC EduAI</h1>
+          <h1 className="text-2xl font-bold text-gray-900">EduAI</h1>
           <p className="text-gray-600 mt-2">
             {isLogin ? 'Welcome back!' : 'Join our learning platform'}
           </p>
@@ -444,7 +444,7 @@ const LoginPage = () => {
         {/* Footer */}
         <div className="text-center mt-6 text-sm text-gray-600">
           <p>
-            By using RRC EduAI, you agree to our{' '}
+            By using EduAI, you agree to our{' '}
             <button 
               onClick={() => window.open('/terms-of-service', '_blank')}
               className="text-blue-600 hover:underline"

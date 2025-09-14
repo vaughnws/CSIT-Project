@@ -21,7 +21,7 @@ const PrivacyPolicy = ({ onBack }) => {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Privacy Policy</h1>
-              <p className="text-gray-600">RRC EduAI Platform</p>
+              <p className="text-gray-600">EduAI Platform</p>
             </div>
           </div>
           <p className="text-sm text-gray-500">
@@ -40,7 +40,7 @@ const PrivacyPolicy = ({ onBack }) => {
                 1. Introduction
               </h2>
               <p className="text-gray-700 mb-4">
-                At RRC EduAI, we are committed to protecting your privacy and personal information. 
+                At EduAI, we are committed to protecting your privacy and personal information. 
                 This Privacy Policy explains how we collect, use, store, and protect your data when you use our AI-powered educational platform.
               </p>
               <p className="text-gray-700">
@@ -303,8 +303,8 @@ const PrivacyPolicy = ({ onBack }) => {
                   If you have questions about this Privacy Policy or want to exercise your privacy rights, contact us:
                 </p>
                 <div className="space-y-2 text-gray-700">
-                  <p><strong>Privacy Officer:</strong> RRC EduAI Privacy Team</p>
-                  <p><strong>Email:</strong> privacy@rrc-eduai.com</p>
+                  <p><strong>Privacy Officer:</strong> EduAI Privacy Team</p>
+                  <p><strong>Email:</strong> vaughnsws@gmail.com</p>
                   <p><strong>Address:</strong> Red River College Polytechnic</p>
                   <p><strong>Response Time:</strong> We aim to respond within 30 days</p>
                 </div>

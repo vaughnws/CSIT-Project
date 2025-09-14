@@ -21,7 +21,7 @@ const TermsOfService = ({ onBack }) => {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Terms of Service</h1>
-              <p className="text-gray-600">RRC EduAI Platform</p>
+              <p className="text-gray-600">EduAI Platform</p>
             </div>
           </div>
           <p className="text-sm text-gray-500">
@@ -40,7 +40,7 @@ const TermsOfService = ({ onBack }) => {
                 1. Agreement to Terms
               </h2>
               <p className="text-gray-700 mb-4">
-                Welcome to the RRC EduAI Platform ("Platform", "Service", "we", "us", or "our"). 
+                Welcome to the EduAI Platform ("Platform", "Service", "we", "us", or "our"). 
                 By accessing or using our AI-powered educational tools and services, you agree to be bound by these Terms of Service.
               </p>
               <p className="text-gray-700">
@@ -55,7 +55,7 @@ const TermsOfService = ({ onBack }) => {
                 2. Platform Description
               </h2>
               <p className="text-gray-700 mb-4">
-                RRC EduAI is an educational platform that provides AI-powered tools including:
+                EduAI is an educational platform that provides AI-powered tools including:
               </p>
               <ul className="list-disc pl-6 text-gray-700 mb-4 space-y-2">
                 <li>Email Assistant for professional communication</li>
@@ -170,7 +170,7 @@ const TermsOfService = ({ onBack }) => {
             <div className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">8. Intellectual Property</h2>
               <p className="text-gray-700 mb-4">
-                The RRC EduAI platform, including its design, code, and AI models, is protected by intellectual property laws. You may:
+                The EduAI platform, including its design, code, and AI models, is protected by intellectual property laws. You may:
               </p>
               <ul className="list-disc pl-6 text-gray-700 mb-4 space-y-2">
                 <li>Use the platform for educational purposes</li>
@@ -207,7 +207,7 @@ const TermsOfService = ({ onBack }) => {
             <div className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">10. Limitation of Liability</h2>
               <p className="text-gray-700 mb-4">
-                To the fullest extent permitted by law, RRC EduAI and its creators shall not be liable for:
+                To the fullest extent permitted by law, EduAI and its creators shall not be liable for:
               </p>
               <ul className="list-disc pl-6 text-gray-700 mb-4 space-y-2">
                 <li>Any indirect, incidental, or consequential damages</li>
@@ -254,7 +254,7 @@ const TermsOfService = ({ onBack }) => {
                   Questions about these Terms of Service? Contact us:
                 </p>
                 <ul className="text-gray-700 space-y-1">
-                  <li><strong>Email:</strong> support@rrc-eduai.com</li>
+                  <li><strong>Email:</strong> vaughnsws@gmail.com</li>
                   <li><strong>Address:</strong> Red River College Polytechnic</li>
                   <li><strong>Platform:</strong> Use the feedback features within the application</li>
                 </ul>

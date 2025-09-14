@@ -14,7 +14,7 @@ export const callOpenRouter = async (
           Authorization:
             "Bearer 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",
           "HTTP-Referer": window.location.origin,
-          "X-Title": "RRC EduAI Platform",
+          "X-Title": "EduAI Platform",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

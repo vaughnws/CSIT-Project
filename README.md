@@ -1,4 +1,4 @@
-# RRC EduAI Platform
+# EduAI Platform
 
 An AI-powered educational platform designed for Red River College students and educators to enhance learning and teaching through intelligent tools and guided tutorials.
 

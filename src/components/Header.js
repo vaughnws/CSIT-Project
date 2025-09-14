@@ -30,7 +30,7 @@ const Header = ({ sidebarOpen, setSidebarOpen, setActiveSection }) => {
           <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
             <Brain className="h-5 w-5 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-gray-900">RRC EduAI</h1>
+          <h1 className="text-xl font-bold text-gray-900">EduAI</h1>
         </div>
       </div>
 

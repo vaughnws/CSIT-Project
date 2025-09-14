@@ -23,7 +23,7 @@ const Dashboard = ({ setActiveSection }) => {
       {/* Hero Section */}
       <div className="text-center py-12 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl">
         <h2 className="text-3xl font-bold text-gray-900 mb-4">
-          Welcome to RRC EduAI
+          Welcome to EduAI
         </h2>
         <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
           Enhance your educational experience with Tutorials and AI-powered

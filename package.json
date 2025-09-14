@@ -1,7 +1,7 @@
 {
-  "name": "rrc-eduai-platform",
+  "name": "eduai-platform",
   "version": "1.0.0",
-  "description": "AI-powered educational platform for Red River College",
+  "description": "AI-powered educational platform",
   "keywords": [
     "education",
     "ai",
