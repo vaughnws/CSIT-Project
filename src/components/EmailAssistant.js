@@ -1,15 +1,22 @@
 import React, { useState } from "react";
 import { Mail, Loader, Copy, RefreshCw } from "lucide-react";
 import { callOpenRouter, copyToClipboard } from "../utils/api";
+import { useAuth } from "../contexts/AuthContext";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 const EmailAssistant = () => {
+  const { user, logToolUsage } = useAuth();
   const [emailContext, setEmailContext] = useState("");
   const [emailType, setEmailType] = useState("professional");
   const [generatedEmail, setGeneratedEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
   const generateEmail = async () => {
+    if (!emailContext.trim()) {
+      showNotification('❌ Please provide email context', 'error');
+      return;
+    }
+
     setLoading(true);
     try {
       const prompt = `You are an email writing assistant. Generate a ${emailType} email based on this context: ${emailContext}. 
@@ -28,15 +35,63 @@ const EmailAssistant = () => {
           : "professional but friendly"
       }.`;
 
-      const response = await callOpenRouter(prompt);
+      const response = await callOpenRouter(
+        prompt, 
+        "openai/gpt-3.5-turbo",
+        user?.id,
+        "email-assistant"
+      );
+      
       setGeneratedEmail(response);
+
+      // Log successful usage
+      if (user) {
+        await logToolUsage("email-assistant", {
+          action: "generate_email",
+          email_type: emailType,
+          context_length: emailContext.length,
+          response_length: response.length,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      showNotification('✅ Email generated successfully!', 'success');
     } catch (error) {
+      console.error('Email generation error:', error);
       setGeneratedEmail(
         "Sorry, there was an error generating your email. Please try again."
       );
+      showNotification('❌ Failed to generate email. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCopy = async () => {
+    const success = await copyToClipboard(generatedEmail, user?.id, "email-assistant");
+    if (success && user) {
+      await logToolUsage("email-assistant", {
+        action: "copy_email",
+        timestamp: new Date().toISOString()
+      });
+    }
+  };
+
+  const showNotification = (message, type = 'info') => {
+    const notification = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 
+                   type === 'error' ? 'bg-red-100 border-red-400 text-red-700' : 
+                   'bg-blue-100 border-blue-400 text-blue-700';
+    
+    notification.className = `fixed top-4 right-4 ${bgColor} px-4 py-3 rounded border z-50 max-w-sm`;
+    notification.innerHTML = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 3000);
   };
 
   return (
@@ -59,7 +114,8 @@ const EmailAssistant = () => {
             <select
               value={emailType}
               onChange={(e) => setEmailType(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={loading}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
             >
               <option value="professional">Professional</option>
               <option value="academic">Academic</option>
@@ -75,8 +131,9 @@ const EmailAssistant = () => {
             <textarea
               value={emailContext}
               onChange={(e) => setEmailContext(e.target.value)}
+              disabled={loading}
               placeholder="Describe what you need the email for (e.g., requesting a meeting with professor, following up on assignment feedback, etc.)"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent h-32 resize-none"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent h-32 resize-none disabled:opacity-50"
             />
           </div>
 
@@ -107,8 +164,9 @@ const EmailAssistant = () => {
               Generated Email
             </h3>
             <button
-              onClick={() => copyToClipboard(generatedEmail)}
-              className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 transition-colors"
+              onClick={handleCopy}
+              disabled={loading}
+              className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 transition-colors disabled:opacity-50"
             >
               <Copy className="h-4 w-4" />
               <span className="text-sm">Copy</span>
@@ -120,7 +178,7 @@ const EmailAssistant = () => {
           <div className="mt-4 flex space-x-3">
             <button
               onClick={generateEmail}
-              disabled={loading}
+              disabled={loading || !emailContext.trim()}
               className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 transition-colors disabled:text-gray-400"
             >
               <RefreshCw className="h-4 w-4" />
@@ -129,6 +187,17 @@ const EmailAssistant = () => {
           </div>
         </div>
       )}
+
+      {/* Usage Tips */}
+      <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
+        <h3 className="text-lg font-semibold text-blue-900 mb-3">💡 Tips for Better Results</h3>
+        <ul className="space-y-2 text-sm text-blue-800">
+          <li>• Be specific about the purpose and recipient of your email</li>
+          <li>• Include any important details like deadlines or meeting preferences</li>
+          <li>• Mention the tone you want (formal, casual, urgent, etc.)</li>
+          <li>• Review and personalize the generated email before sending</li>
+        </ul>
+      </div>
     </div>
   );
 };

@@ -1,6 +1,41 @@
-import { createUser } from '../../utils/database.js';
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+const createUser = async (stackUserId, email, name, role = 'student') => {
+  try {
+    const query = `
+      INSERT INTO users (stack_user_id, email, name, role)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (email) DO UPDATE SET
+        name = EXCLUDED.name,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `;
+    const result = await pool.query(query, [stackUserId, email, name, role]);
+    return result.rows[0];
+  } catch (error) {
+    console.error('Error creating user:', error);
+    throw error;
+  }
+};
 
 export default async function handler(req, res) {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -18,13 +53,13 @@ export default async function handler(req, res) {
 
     const user = await createUser(stackUserId, email, name, role);
     
-    res.status(201).json({ user, success: true });
+    return res.status(201).json({ user, success: true });
   } catch (error) {
     console.error('Registration error:', error);
     if (error.code === '23505') { // Unique constraint violation
-      res.status(409).json({ error: 'User already exists' });
+      return res.status(409).json({ error: 'User already exists' });
     } else {
-      res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Internal server error', details: error.message });
     }
   }
 }

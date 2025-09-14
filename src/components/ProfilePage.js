@@ -12,57 +12,169 @@ import {
   X,
   CheckCircle,
   Clock,
-  TrendingUp
+  TrendingUp,
+  AlertCircle,
+  Loader,
+  RefreshCw,
+  Award,
+  Star
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { createClient } from '@supabase/supabase-js';
 
-const ProfilePage = () => {
-  const { user, logout, updateUserProgress } = useAuth();
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_ANON_KEY
+);
+
+const ProfilePage = ({ userStats: initialUserStats }) => {
+  const { user, logout, updateUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [userStats, setUserStats] = useState(null);
+  const [userStats, setUserStats] = useState(initialUserStats);
+  const [loading, setLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [editForm, setEditForm] = useState({
     name: user?.name || '',
     email: user?.email || '',
     role: user?.role || 'student',
   });
 
+  // Check if Supabase is configured
+  const isSupabaseConfigured = () => {
+    return process.env.REACT_APP_SUPABASE_URL && 
+           process.env.REACT_APP_SUPABASE_ANON_KEY &&
+           process.env.REACT_APP_SUPABASE_URL !== 'https://dummy.supabase.co' &&
+           process.env.REACT_APP_SUPABASE_ANON_KEY !== 'dummy_key';
+  };
+
   useEffect(() => {
-    fetchUserStats();
-  }, [user]);
+    if (user) {
+      setEditForm({
+        name: user.name || '',
+        email: user.email || '',
+        role: user.role || 'student',
+      });
+
+      if (!initialUserStats) {
+        fetchUserStats();
+      } else {
+        setUserStats(initialUserStats);
+      }
+    }
+  }, [user, initialUserStats]);
 
   const fetchUserStats = async () => {
     if (!user) return;
 
+    setStatsLoading(true);
     try {
-      const response = await fetch(`/api/user/stats?userId=${user.id}`);
-      if (response.ok) {
-        const stats = await response.json();
-        setUserStats(stats);
+      if (user.provider === 'demo') {
+        const progressKey = `user_progress_${user.id}`;
+        const sessionsKey = `user_sessions_${user.id}`;
+        
+        const progress = JSON.parse(localStorage.getItem(progressKey) || '[]');
+        const sessions = JSON.parse(localStorage.getItem(sessionsKey) || '[]');
+        
+        const toolsUsed = new Set(sessions.map(session => session.tool_used)).size;
+        const recentSessions = sessions
+          .slice(-5)
+          .reverse()
+          .map(session => ({
+            tool_used: session.tool_used,
+            created_at: session.created_at
+          }));
+
+        setUserStats({
+          tutorials_completed: progress.length,
+          tools_used: toolsUsed,
+          total_sessions: sessions.length,
+          recent_sessions: recentSessions
+        });
+
+      } else if (isSupabaseConfigured()) {
+        await fetchSupabaseStats();
       }
     } catch (error) {
       console.error('Error fetching user stats:', error);
+      setUserStats({
+        tutorials_completed: 0,
+        tools_used: 0,
+        total_sessions: 0,
+        recent_sessions: []
+      });
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const fetchSupabaseStats = async () => {
+    try {
+      const { data: progressData, error: progressError } = await supabase
+        .from('user_progress')
+        .select('tutorial_id')
+        .eq('user_id', user.id);
+
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from('user_sessions')
+        .select('tool_used, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (progressError && !progressError.message.includes('relation')) {
+        throw progressError;
+      }
+
+      if (sessionsError && !sessionsError.message.includes('relation')) {
+        throw sessionsError;
+      }
+
+      const progress = progressData || [];
+      const sessions = sessionsData || [];
+      
+      const toolsUsed = new Set(sessions.map(s => s.tool_used)).size;
+      const recentSessions = sessions.slice(0, 5);
+
+      setUserStats({
+        tutorials_completed: progress.length,
+        tools_used: toolsUsed,
+        total_sessions: sessions.length,
+        recent_sessions: recentSessions
+      });
+
+    } catch (error) {
+      console.error('Error fetching Supabase stats:', error);
+      setUserStats({
+        tutorials_completed: 0,
+        tools_used: 0,
+        total_sessions: 0,
+        recent_sessions: []
+      });
     }
   };
 
   const handleSaveProfile = async () => {
-    try {
-      const response = await fetch('/api/user/update-profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          ...editForm,
-        }),
-      });
+    if (!editForm.name.trim()) {
+      showNotification('❌ Name cannot be empty', 'error');
+      return;
+    }
 
-      if (response.ok) {
+    setLoading(true);
+    try {
+      const result = await updateUser(editForm);
+
+      if (result.success) {
         setIsEditing(false);
-        // You might want to refresh user data here
+        showNotification('✅ Profile updated successfully!', 'success');
+      } else {
+        throw new Error(result.error || 'Update failed');
       }
     } catch (error) {
       console.error('Error updating profile:', error);
+      showNotification(`❌ Update failed: ${error.message}`, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,8 +185,92 @@ const ProfilePage = () => {
     }
   };
 
+  const handleExportData = async () => {
+    try {
+      let exportData = {
+        user: user,
+        exported_at: new Date().toISOString()
+      };
+
+      if (user.provider === 'demo') {
+        const progressKey = `user_progress_${user.id}`;
+        const sessionsKey = `user_sessions_${user.id}`;
+        
+        exportData.progress = JSON.parse(localStorage.getItem(progressKey) || '[]');
+        exportData.sessions = JSON.parse(localStorage.getItem(sessionsKey) || '[]');
+      } else if (isSupabaseConfigured()) {
+        const { data: progressData } = await supabase
+          .from('user_progress')
+          .select('*')
+          .eq('user_id', user.id);
+
+        const { data: sessionsData } = await supabase
+          .from('user_sessions')
+          .select('*')
+          .eq('user_id', user.id);
+
+        exportData.progress = progressData || [];
+        exportData.sessions = sessionsData || [];
+      }
+
+      exportData.stats = userStats;
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rrc-eduai-data-${user.email}-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      showNotification('✅ Data exported successfully!', 'success');
+    } catch (error) {
+      console.error('Export error:', error);
+      showNotification('❌ Export failed', 'error');
+    }
+  };
+
+  const handleClearData = async () => {
+    if (!window.confirm('Are you sure you want to clear all your data? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      if (user.provider === 'demo') {
+        localStorage.removeItem(`user_progress_${user.id}`);
+        localStorage.removeItem(`user_sessions_${user.id}`);
+      } else if (isSupabaseConfigured()) {
+        await supabase.from('user_progress').delete().eq('user_id', user.id);
+        await supabase.from('user_sessions').delete().eq('user_id', user.id);
+      }
+
+      await fetchUserStats();
+      showNotification('✅ Data cleared successfully!', 'success');
+    } catch (error) {
+      console.error('Clear data error:', error);
+      showNotification('❌ Failed to clear data', 'error');
+    }
+  };
+
+  const showNotification = (message, type = 'info') => {
+    const notification = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 
+                   type === 'error' ? 'bg-red-100 border-red-400 text-red-700' : 
+                   'bg-blue-100 border-blue-400 text-blue-700';
+    
+    notification.className = `fixed top-4 right-4 ${bgColor} px-4 py-3 rounded border z-50 max-w-sm`;
+    notification.innerHTML = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 3000);
+  };
+
   const calculateProgress = () => {
-    const totalTutorials = 6; // From tutorial data
+    const totalTutorials = 6;
     const completed = userStats?.tutorials_completed || 0;
     return Math.round((completed / totalTutorials) * 100);
   };
@@ -95,10 +291,76 @@ const ProfilePage = () => {
     return 'bg-blue-500';
   };
 
+  const formatToolName = (toolName) => {
+    return toolName.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  // Check for achievements
+  const getAchievements = () => {
+    const achievements = [];
+    
+    if (userStats?.tutorials_completed > 0) {
+      achievements.push({
+        id: 'first-steps',
+        name: 'First Steps',
+        description: 'Completed your first tutorial',
+        icon: Trophy,
+        color: 'green'
+      });
+    }
+    
+    if (userStats?.tutorials_completed >= 6) {
+      achievements.push({
+        id: 'tutorial-master',
+        name: 'Tutorial Master',
+        description: 'Completed all tutorials',
+        icon: Award,
+        color: 'gold'
+      });
+    }
+    
+    if (calculateProgress() >= 50) {
+      achievements.push({
+        id: 'halfway-there',
+        name: 'Half Way There',
+        description: '50% of tutorials completed',
+        icon: Star,
+        color: 'yellow'
+      });
+    }
+
+    if (userStats?.tools_used >= 3) {
+      achievements.push({
+        id: 'tool-explorer',
+        name: 'Tool Explorer',
+        description: 'Used 3+ different tools',
+        icon: Trophy,
+        color: 'purple'
+      });
+    }
+
+    if (userStats?.tools_used >= 6) {
+      achievements.push({
+        id: 'tool-master',
+        name: 'Tool Master',
+        description: 'Used all available tools',
+        icon: Award,
+        color: 'gold'
+      });
+    }
+
+    return achievements;
+  };
+
+  const achievements = getAchievements();
+
   if (!user) {
     return (
       <div className="max-w-4xl mx-auto p-6 text-center">
-        <p className="text-gray-600">Loading user data...</p>
+        <div className="flex items-center justify-center">
+          <Loader className="h-8 w-8 animate-spin text-blue-600" />
+          <span className="ml-2 text-gray-600">Loading user data...</span>
+        </div>
       </div>
     );
   }
@@ -109,6 +371,13 @@ const ProfilePage = () => {
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">User Profile</h2>
         <p className="text-gray-600">Manage your account and track your progress</p>
+        {user.provider === 'demo' && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-4">
+            <p className="text-yellow-800 text-sm">
+              🔒 You're using a demo account. Data is stored locally and will be cleared when you log out.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Profile Card */}
@@ -121,15 +390,23 @@ const ProfilePage = () => {
             <div>
               <h3 className="text-xl font-semibold text-gray-900">{user.name}</h3>
               <p className="text-gray-600">{user.email}</p>
-              <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium mt-2 ${getRoleColor(user.role)}`}>
-                {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-              </span>
+              <div className="flex items-center space-x-2 mt-2">
+                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getRoleColor(user.role)}`}>
+                  {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                </span>
+                {user.provider && (
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    {user.provider === 'demo' ? 'Demo Account' : `${user.provider} Account`}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex space-x-2">
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={loading}
+              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
             >
               {isEditing ? <X className="h-5 w-5" /> : <Edit3 className="h-5 w-5" />}
             </button>
@@ -155,34 +432,50 @@ const ProfilePage = () => {
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={loading}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email
+                  Role
                 </label>
-                <input
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  disabled={loading}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                >
+                  <option value="student">Student</option>
+                  <option value="educator">Educator</option>
+                  <option value="researcher">Researcher</option>
+                </select>
               </div>
             </div>
             <div className="flex justify-end space-x-3 mt-4">
               <button
                 onClick={() => setIsEditing(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                disabled={loading}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveProfile}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                disabled={loading}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
               >
-                <Save className="h-4 w-4" />
-                <span>Save Changes</span>
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Save Changes</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -205,7 +498,11 @@ const ProfilePage = () => {
             </div>
             <p className="text-sm text-gray-600">Tutorials Completed</p>
             <p className="font-semibold text-gray-900">
-              {userStats?.tutorials_completed || 0} / 6
+              {statsLoading ? (
+                <Loader className="h-4 w-4 animate-spin mx-auto" />
+              ) : (
+                `${userStats?.tutorials_completed || 0} / 6`
+              )}
             </p>
           </div>
           <div className="text-center">
@@ -214,7 +511,11 @@ const ProfilePage = () => {
             </div>
             <p className="text-sm text-gray-600">Tools Used</p>
             <p className="font-semibold text-gray-900">
-              {userStats?.tools_used || 0}
+              {statsLoading ? (
+                <Loader className="h-4 w-4 animate-spin mx-auto" />
+              ) : (
+                userStats?.tools_used || 0
+              )}
             </p>
           </div>
         </div>
@@ -222,7 +523,17 @@ const ProfilePage = () => {
 
       {/* Progress Overview */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Learning Progress</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Learning Progress</h3>
+          <button
+            onClick={fetchUserStats}
+            disabled={statsLoading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`h-4 w-4 ${statsLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh Stats</span>
+          </button>
+        </div>
         
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
@@ -241,19 +552,25 @@ const ProfilePage = () => {
           <div>
             <h4 className="font-medium text-gray-900 mb-3">Recent Activity</h4>
             <div className="space-y-3">
-              {userStats?.recent_sessions ? userStats.recent_sessions.map((session, index) => (
-                <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Clock className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{session.tool_used}</p>
-                    <p className="text-xs text-gray-600">
-                      {new Date(session.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
+              {statsLoading ? (
+                <div className="flex items-center justify-center p-4">
+                  <Loader className="h-6 w-6 animate-spin text-gray-400" />
                 </div>
-              )) : (
+              ) : userStats?.recent_sessions && userStats.recent_sessions.length > 0 ? (
+                userStats.recent_sessions.map((session, index) => (
+                  <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Clock className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{formatToolName(session.tool_used)}</p>
+                      <p className="text-xs text-gray-600">
+                        {new Date(session.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
                 <p className="text-sm text-gray-600">No recent activity</p>
               )}
             </div>
@@ -262,36 +579,35 @@ const ProfilePage = () => {
           <div>
             <h4 className="font-medium text-gray-900 mb-3">Achievements</h4>
             <div className="space-y-3">
-              <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
-                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Trophy className="h-4 w-4 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">First Steps</p>
-                  <p className="text-xs text-gray-600">Completed first tutorial</p>
-                </div>
-              </div>
-              
-              {calculateProgress() >= 50 && (
-                <div className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-                    <Trophy className="h-4 w-4 text-yellow-600" />
+              {achievements.length > 0 ? (
+                achievements.map((achievement) => {
+                  const Icon = achievement.icon;
+                  const colorClass = achievement.color === 'gold' ? 'bg-yellow-100 text-yellow-600' :
+                                   achievement.color === 'green' ? 'bg-green-100 text-green-600' :
+                                   achievement.color === 'yellow' ? 'bg-yellow-100 text-yellow-600' :
+                                   achievement.color === 'purple' ? 'bg-purple-100 text-purple-600' :
+                                   'bg-blue-100 text-blue-600';
+                  
+                  return (
+                    <div key={achievement.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                      <div className={`w-8 h-8 ${colorClass} rounded-lg flex items-center justify-center`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{achievement.name}</p>
+                        <p className="text-xs text-gray-600">{achievement.description}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <AlertCircle className="h-4 w-4 text-gray-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">Half Way There</p>
-                    <p className="text-xs text-gray-600">50% of tutorials completed</p>
-                  </div>
-                </div>
-              )}
-
-              {userStats?.tools_used >= 3 && (
-                <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <Trophy className="h-4 w-4 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Tool Explorer</p>
-                    <p className="text-xs text-gray-600">Used 3+ different tools</p>
+                    <p className="text-sm font-medium text-gray-900">Getting Started</p>
+                    <p className="text-xs text-gray-600">Complete your first tutorial to unlock achievements</p>
                   </div>
                 </div>
               )}
@@ -310,21 +626,21 @@ const ProfilePage = () => {
         <div className="grid md:grid-cols-4 gap-4">
           <div className="text-center p-4 bg-blue-50 rounded-lg">
             <div className="text-2xl font-bold text-blue-600">
-              {userStats?.total_sessions || 0}
+              {statsLoading ? <Loader className="h-6 w-6 animate-spin mx-auto" /> : userStats?.total_sessions || 0}
             </div>
             <div className="text-sm text-gray-600">Total Sessions</div>
           </div>
           
           <div className="text-center p-4 bg-green-50 rounded-lg">
             <div className="text-2xl font-bold text-green-600">
-              {userStats?.tutorials_completed || 0}
+              {statsLoading ? <Loader className="h-6 w-6 animate-spin mx-auto" /> : userStats?.tutorials_completed || 0}
             </div>
             <div className="text-sm text-gray-600">Tutorials Done</div>
           </div>
           
           <div className="text-center p-4 bg-purple-50 rounded-lg">
             <div className="text-2xl font-bold text-purple-600">
-              {userStats?.tools_used || 0}
+              {statsLoading ? <Loader className="h-6 w-6 animate-spin mx-auto" /> : userStats?.tools_used || 0}
             </div>
             <div className="text-sm text-gray-600">Tools Mastered</div>
           </div>
@@ -362,18 +678,24 @@ const ProfilePage = () => {
               <h4 className="font-medium text-gray-900">Data Export</h4>
               <p className="text-sm text-gray-600">Download your learning progress and data</p>
             </div>
-            <button className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors">
+            <button 
+              onClick={handleExportData}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+            >
               Export Data
             </button>
           </div>
           
           <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
             <div>
-              <h4 className="font-medium text-red-900">Delete Account</h4>
-              <p className="text-sm text-red-600">Permanently delete your account and all data</p>
+              <h4 className="font-medium text-red-900">Clear Data</h4>
+              <p className="text-sm text-red-600">Clear all your progress and session data</p>
             </div>
-            <button className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
-              Delete Account
+            <button 
+              onClick={handleClearData}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Clear Data
             </button>
           </div>
         </div>

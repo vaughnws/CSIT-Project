@@ -3,17 +3,14 @@ import { Play, CheckCircle, X } from "lucide-react";
 
 const Tutorials = ({
   completedTutorials,
-  setCompletedTutorials,
+  setCompletedTutorials, // This is now the completion handler function
   tutorials,
 }) => {
   const [activeVideo, setActiveVideo] = useState(null);
 
-  // const [completedTutorials, setCompletedTutorials] = useState([]);
-
-  const markComplete = (tutorialId) => {
-    if (!completedTutorials.includes(tutorialId)) {
-      setCompletedTutorials([...completedTutorials, tutorialId]);
-    }
+  const markComplete = async (tutorialId) => {
+    // Call the completion handler passed from App
+    await setCompletedTutorials(tutorialId);
   };
 
   // Function to get video embed code based on type and URL

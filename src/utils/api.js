@@ -1,9 +1,7 @@
-import { useAuth } from '../contexts/AuthContext';
-
 // Enhanced API Integration Function for OpenRouter with user tracking
 export const callOpenRouter = async (
   prompt,
-  model = "openai/gpt-oss-20b:free@preset/rrc-eduai",
+  model = "openai/gpt-3.5-turbo",
   userId = null,
   toolName = null
 ) => {
@@ -62,28 +60,17 @@ export const callOpenRouter = async (
 
     const responseContent = data.choices[0].message.content;
 
-    // Log usage if user and tool info provided
+    // Log usage to localStorage if user and tool info provided
     if (userId && toolName) {
       try {
-        await fetch('/api/user/log-usage', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: userId,
-            toolUsed: toolName,
-            sessionData: {
-              prompt_length: prompt.length,
-              response_length: responseContent.length,
-              model_used: model,
-              timestamp: new Date().toISOString()
-            }
-          }),
+        logToolUsageToLocalStorage(userId, toolName, {
+          prompt_length: prompt.length,
+          response_length: responseContent.length,
+          model_used: model,
+          timestamp: new Date().toISOString()
         });
       } catch (logError) {
-        console.warn('Failed to log usage:', logError);
-        // Don't throw error for logging failures
+        console.warn('Failed to log usage to localStorage:', logError);
       }
     }
 
@@ -112,26 +99,27 @@ export const callOpenRouter = async (
   }
 };
 
-// Hook for authenticated API calls
-export const useAuthenticatedAPI = () => {
-  const { user, logToolUsage } = useAuth();
-
-  const callOpenRouterWithAuth = async (prompt, toolName, model = "openai/gpt-oss-20b:free@preset/rrc-eduai") => {
-    const response = await callOpenRouter(prompt, model, user?.id, toolName);
+// Helper function to log tool usage to localStorage
+const logToolUsageToLocalStorage = (userId, toolName, sessionData) => {
+  try {
+    const sessionsKey = `user_sessions_${userId}`;
+    const existingSessions = JSON.parse(localStorage.getItem(sessionsKey) || '[]');
     
-    // Also log through auth context for immediate UI updates
-    if (user && toolName) {
-      await logToolUsage(toolName, {
-        prompt_length: prompt.length,
-        response_length: response.length,
-        model_used: model
-      });
+    existingSessions.push({
+      tool_used: toolName,
+      session_data: sessionData,
+      created_at: new Date().toISOString()
+    });
+    
+    // Keep only last 50 sessions to prevent localStorage bloat
+    if (existingSessions.length > 50) {
+      existingSessions.splice(0, existingSessions.length - 50);
     }
     
-    return response;
-  };
-
-  return { callOpenRouterWithAuth };
+    localStorage.setItem(sessionsKey, JSON.stringify(existingSessions));
+  } catch (error) {
+    console.warn('Failed to log to localStorage:', error);
+  }
 };
 
 // Alternative API call function with different model options
@@ -175,25 +163,16 @@ export const downloadTextFile = async (content, filename, userId = null, toolNam
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+    URL.revokeObjectURL(element.href);
 
-    // Log download action
+    // Log download action to localStorage
     if (userId && toolName) {
       try {
-        await fetch('/api/user/log-usage', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: userId,
-            toolUsed: `${toolName}_download`,
-            sessionData: {
-              action: 'download',
-              filename: filename,
-              content_length: content.length,
-              timestamp: new Date().toISOString()
-            }
-          }),
+        logToolUsageToLocalStorage(userId, `${toolName}_download`, {
+          action: 'download',
+          filename: filename,
+          content_length: content.length,
+          timestamp: new Date().toISOString()
         });
       } catch (logError) {
         console.warn('Failed to log download:', logError);
@@ -230,87 +209,139 @@ export const copyToClipboard = async (text, userId = null, toolName = null) => {
       textArea.remove();
     }
 
-    // Log copy action
+    // Log copy action to localStorage
     if (success && userId && toolName) {
       try {
-        await fetch('/api/user/log-usage', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: userId,
-            toolUsed: `${toolName}_copy`,
-            sessionData: {
-              action: 'copy',
-              content_length: text.length,
-              timestamp: new Date().toISOString()
-            }
-          }),
+        logToolUsageToLocalStorage(userId, `${toolName}_copy`, {
+          action: 'copy',
+          content_length: text.length,
+          timestamp: new Date().toISOString()
         });
       } catch (logError) {
         console.warn('Failed to log copy action:', logError);
       }
     }
 
+    // Show user feedback
+    if (success) {
+      showNotification('✅ Copied to clipboard!', 'success');
+    }
+
     return success;
   } catch (error) {
     console.error("Failed to copy text: ", error);
-    // Show fallback message to user
-    prompt("Copy this text manually:\n\n" + text);
+    
+    // Show fallback for manual copy
+    const fallbackDiv = document.createElement('div');
+    fallbackDiv.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+    fallbackDiv.innerHTML = `
+      <div class="bg-white rounded-lg p-6 max-w-md w-full">
+        <h3 class="text-lg font-semibold mb-4">Manual Copy</h3>
+        <p class="text-sm text-gray-600 mb-4">Please copy this text manually:</p>
+        <textarea class="w-full h-32 p-3 border rounded-lg text-sm" readonly>${text}</textarea>
+        <button onclick="this.parentElement.parentElement.remove()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Close</button>
+      </div>
+    `;
+    document.body.appendChild(fallbackDiv);
+    
+    // Select the text in the textarea
+    const textarea = fallbackDiv.querySelector('textarea');
+    textarea.focus();
+    textarea.select();
+    
     return false;
   }
 };
 
-// User progress functions
+// Utility function to show notifications
+const showNotification = (message, type = 'info') => {
+  const notification = document.createElement('div');
+  const bgColor = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 
+                 type === 'error' ? 'bg-red-100 border-red-400 text-red-700' : 
+                 'bg-blue-100 border-blue-400 text-blue-700';
+  
+  notification.className = `fixed top-4 right-4 ${bgColor} px-4 py-3 rounded border z-50 max-w-sm`;
+  notification.innerHTML = message;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.parentNode.removeChild(notification);
+    }
+  }, 3000);
+};
+
+// User progress functions using localStorage
 export const markTutorialComplete = async (userId, tutorialId) => {
   try {
-    const response = await fetch('/api/user/progress', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        userId: userId,
-        tutorialId: tutorialId,
-      }),
-    });
-
-    if (response.ok) {
-      return await response.json();
-    } else {
-      throw new Error('Failed to mark tutorial complete');
+    const progressKey = `user_progress_${userId}`;
+    const existingProgress = JSON.parse(localStorage.getItem(progressKey) || '[]');
+    
+    if (!existingProgress.includes(tutorialId)) {
+      existingProgress.push(tutorialId);
+      localStorage.setItem(progressKey, JSON.stringify(existingProgress));
     }
+    
+    return { success: true, progress: existingProgress };
   } catch (error) {
     console.error('Error marking tutorial complete:', error);
     throw error;
   }
 };
 
-// Get user statistics
+// Get user statistics from localStorage
 export const getUserStats = async (userId) => {
   try {
-    const response = await fetch(`/api/user/stats?userId=${userId}`);
+    const progressKey = `user_progress_${userId}`;
+    const sessionsKey = `user_sessions_${userId}`;
     
-    if (response.ok) {
-      return await response.json();
-    } else {
-      throw new Error('Failed to fetch user stats');
-    }
+    const progress = JSON.parse(localStorage.getItem(progressKey) || '[]');
+    const sessions = JSON.parse(localStorage.getItem(sessionsKey) || '[]');
+    
+    const toolsUsed = new Set(sessions.map(session => session.tool_used)).size;
+    const recentSessions = sessions.slice(-5).reverse();
+    
+    return {
+      tutorials_completed: progress.length,
+      tools_used: toolsUsed,
+      total_sessions: sessions.length,
+      recent_sessions: recentSessions.map(session => ({
+        tool_used: session.tool_used,
+        created_at: session.created_at
+      }))
+    };
   } catch (error) {
     console.error('Error fetching user stats:', error);
-    throw error;
+    return {
+      tutorials_completed: 0,
+      tools_used: 0,
+      total_sessions: 0,
+      recent_sessions: []
+    };
   }
+};
+
+// Hook for components to use with user context
+export const useAuthenticatedAPI = () => {
+  // This would need to be imported from the auth context in the component
+  // For now, just return the basic functions
+  return {
+    callOpenRouter,
+    copyToClipboard,
+    downloadTextFile,
+    markTutorialComplete,
+    getUserStats
+  };
 };
 
 // Export all functions
 export default {
   callOpenRouter,
-  useAuthenticatedAPI,
   callOpenRouterWithModel,
   testAPIConnection,
   downloadTextFile,
   copyToClipboard,
   markTutorialComplete,
-  getUserStats
+  getUserStats,
+  useAuthenticatedAPI
 };
